@@ -11,9 +11,12 @@ const {onRequest} = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 const {onDocumentCreated} = require("firebase-functions/firestore");
+const {initializeApp} = require("firebase-admin/app");
 
 // Create and deploy your first functions
 // https://firebase.google.com/docs/functions/get-started
+
+initializeApp()
 
 exports.helloWorld = onRequest((request, response) => {
     logger.info("Hello logs!", {structuredData: true});
@@ -21,15 +24,16 @@ exports.helloWorld = onRequest((request, response) => {
 });
 
 exports.sendFriendRequestNotification = onDocumentCreated("/users/{receiverId}/friends/{senderId}", async (event) => {
-    const snap = event.data.data();
-    const request = snap.data();
     const receiverId = event.params.receiverId;
     const senderId = event.params.senderId;
-    const senderName = request.senderName;
+    const senderName = event?.data.data().senderName || "Un utilisateur";
 
     console.log(`Nouvelle demande d’ami de ${senderId} à ${receiverId}`);
+    const data = event.data.data(); // Récupération des données du document
+    console.log("Data:", data);
 
-    if (!request.isRequest) {
+    if (data.isRequest) {
+        console.log(`La demande d’ami de ${senderId} à ${receiverId} n’est pas explicite.`);
         console.log("Document créé sans demande d’ami explicite. Ignoré.");
         return;
     }
@@ -54,7 +58,10 @@ exports.sendFriendRequestNotification = onDocumentCreated("/users/{receiverId}/f
             notification: {
                 title: "Nouvelle demande d’ami 💌",
                 body: `${senderName} t’a envoyé une demande d’ami.`,
-                // clickAction: 'FLUTTER_NOTIFICATION_CLICK', // ou ton intent personnalisé
+                //click_action: "com.example.dreamary.FRIEND_REQUEST"
+            },
+            data: {
+                click_action: "com.example.dreamary.FRIEND_REQUEST",
             },
             token: fcmToken,
         };
@@ -62,6 +69,7 @@ exports.sendFriendRequestNotification = onDocumentCreated("/users/{receiverId}/f
         // Envoyer la notification
         const response = await admin.messaging().send(payload);
         console.log(`Notification envoyée à ${receiverId}`, response);
+        return response;
 
     } catch (error) {
         console.error("Erreur lors de l’envoi de la notification :", error);
